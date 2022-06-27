@@ -1,6 +1,6 @@
 {
     "name": "datlechin/flarum-discussion-count",
-    "description": "Display discussion count against tags",
+    "description": "Display discussion count against tags.",
     "keywords": [
         "flarum",
         "flarum extension",
