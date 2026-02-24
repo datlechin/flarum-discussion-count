@@ -1,48 +1,58 @@
 import app from 'flarum/forum/app';
-import { extend, override } from 'flarum/common/extend';
-import TagLinkButton from 'flarum/tags/components/TagLinkButton';
-import TagsPage from 'flarum/tags/components/TagsPage';
-import classList from 'flarum/common/utils/classList';
-import tagIcon from 'flarum/tags/common/helpers/tagIcon';
-import Link from 'flarum/common/components/Link';
-import sortTags from 'flarum/tags/common/utils/sortTags';
+import { extend } from 'flarum/common/extend';
+import sortTags from 'ext:flarum/tags/common/utils/sortTags';
+
+function findByClassName(vnode, className) {
+  if (!vnode || typeof vnode !== 'object') return null;
+  if (Array.isArray(vnode)) {
+    for (const child of vnode) {
+      const found = findByClassName(child, className);
+      if (found) return found;
+    }
+    return null;
+  }
+  if (vnode.attrs && typeof vnode.attrs.className === 'string' && vnode.attrs.className.split(/\s+/).includes(className)) {
+    return vnode;
+  }
+  if (vnode.children) return findByClassName(vnode.children, className);
+  return null;
+}
+
+function appendText(vnode, text) {
+  if (!vnode) return;
+
+  if (typeof vnode.text === 'string') {
+    vnode.text += text;
+    return;
+  }
+
+  if (Array.isArray(vnode.children)) {
+    const last = vnode.children[vnode.children.length - 1];
+    if (last && last.tag === '#' && typeof last.children === 'string') {
+      last.children += text;
+    }
+  }
+}
 
 app.initializers.add('datlechin/flarum-discussion-count', () => {
-  override(TagLinkButton.prototype, 'view', function () {
+  extend('ext:flarum/tags/forum/components/TagLinkButton', 'view', function (vnode) {
     const tag = this.attrs.model;
-    const description = tag && tag.description();
-    const className = classList(['TagLinkButton', 'hasIcon', this.attrs.className, tag.isChild() && 'child']);
-
-    return (
-      <Link className={className} href={this.attrs.route} style={tag ? { '--color': tag.color() } : ''} title={description || ''}>
-        {tagIcon(tag, { className: 'Button-icon' })}
-        <span className="Button-label">
-          {tag ? tag.name() : app.translator.trans('flarum-tags.forum.index.untagged_link')} ({tag.discussionCount()})
-        </span>
-      </Link>
-    );
+    if (!tag) return;
+    appendText(findByClassName(vnode, 'Button-label'), ` (${tag.discussionCount()})`);
   });
 
-  extend(TagsPage.prototype, ['oncreate'], function () {
-    const tags = this.tags;
-    const tagsItem = document.querySelectorAll('.TagTile-info');
+  extend('ext:flarum/tags/forum/components/TagsPage', 'tagTileView', function (vnode, tag) {
+    appendText(findByClassName(vnode, 'TagTile-name'), ` (${tag.discussionCount()})`);
 
-    tagsItem.forEach(function (item) {
-      const tagName = item.querySelector('.TagTile-name').innerText;
-      const tag = tags.find((tag) => tag.name() === tagName);
-      const children = sortTags(tag.children() || []);
-      const discussionCount = tag.discussionCount();
-
-      const childrenLinks = item.querySelectorAll('.TagTile-children a');
-
-      childrenLinks.forEach(function (link) {
-        const childTagName = link.innerText;
-        const childTag = children.find((tag) => tag.name() === childTagName);
-        const childDiscussionCount = childTag.discussionCount();
-        link.innerText = `${childTagName} (${childDiscussionCount})`;
-      });
-
-      item.querySelector('.TagTile-name').innerText += ` (${discussionCount})`;
-    });
+    const childrenNode = findByClassName(vnode, 'TagTile-children');
+    if (childrenNode && Array.isArray(childrenNode.children)) {
+      const childTags = sortTags(tag.children() || []);
+      let i = 0;
+      for (const item of childrenNode.children) {
+        if (!item || typeof item !== 'object' || item.tag === '#') continue;
+        if (childTags[i]) appendText(item, ` (${childTags[i].discussionCount()})`);
+        i++;
+      }
+    }
   });
 });
